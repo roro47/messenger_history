@@ -11,13 +11,14 @@ class User(Base):
     __tablename__ = "users"
     
     name = Column(String(250))
-    uid = Column(Integer, primary_key=True)
+    user_uid = Column(Integer, primary_key=True)
 
 
 class Message(Base):
     __tablename__ = "messages"
     timestamp = Column(Integer, primary_key=True)
-    user_uid = Column(Integer, ForeignKey('users.uid'), primary_key=True)
+    user_uid = Column(Integer, ForeignKey('users.uid'), \
+                      primary_key=True)
     message_uid = Column(Integer)
     text = Column(String)
     author_uid = Column(Integer)
@@ -30,12 +31,14 @@ class File(Base):
     name = Column(String)
     url = Column(String)
     size = Column(Integer)
+    timestamp = Column(Integer)
 
 class Url(Base):
     __tablename__ = "urls"
     url = Column(String, primary_key=True)
     user_uid = Column(Integer, ForeignKey('users.uid'))
     author_uid = Column(Integer, ForeignKey('users.uid'))
+    timestamp = Column(Integer)
 
 class Image(Base):
     __tablename__ = "images"
@@ -43,14 +46,16 @@ class Image(Base):
     image_uid = Column(Integer, primary_key=True)
     user_uid = Column(Integer, ForeignKey('users.uid'))
     url = Column(String)
+    timestamp = Column(Integer)
 
-    
-    #large_preview_url = Column(String)
-    #preview_url = Column(String)
-    #thumbnail_url = Column(String)
+class Video(Base):
+    __tablename__ = "videos"
+    video_uid = Column(Integer, primary_key=True)
+    user_uid = Column(Integer, ForeignKey('users.uid'))
+    timestamp = Column(Integer)
 
-
-User.messages = relationship("Message", order_by=Message.timestamp, back_populates="user")
+User.messages = relationship("Message", order_by=Message.timestamp, \
+                             back_populates="user")
 engine = create_engine("sqlite:///message.db")
 
 Base.metadata.create_all(engine)
