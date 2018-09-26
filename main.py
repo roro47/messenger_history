@@ -1,13 +1,15 @@
 import re
-from sqlalchemy import create_engine, desc
+from sqlalchemy import create_engine, desc, asc
 from sqlalchemy.orm import sessionmaker
 from messenger_db import User, Base, Message
 
 import format
 from fb_chat import FbBot
 from command_parser import get_parser, update_parser, show_parser
+from datetime import datetime
 
 def main():
+    
     engine = create_engine("sqlite:///message.db")
     #engine = create_engine("") # fill this
     Base.metadata.bind = engine
@@ -16,7 +18,10 @@ def main():
     
     email = "" # fill this
     password = "" # fill this
-    fbbot = FbBot(email, password, session, engine)
+    #email = input("email> ")
+    #password = input("password> ")
+    start_time = datetime(year=2018, month=1, day=1)
+    fbbot = FbBot(email, password, session, engine, start_time)
 
     ok = True
     
@@ -24,7 +29,7 @@ def main():
         args = get_parser.parse_args(args)
         if not args.user:
             return
-        fbbot.get_concurrent(args.user)
+        fbbot.get_concurrent(args.user.replace('-', ' '))
         return
 
     def update(args, fbbot=fbbot):
@@ -55,12 +60,12 @@ def main():
                                     else Message.user_uid==uid and \
                                     regex.search(Message.text))\
                             .order_by(desc(float(Message.timestamp)))
-            break
+    
         if "images" in args.option:
             images += session.query(Image)\
                             .filter(Message.user_uid==uid and \
                                     regex.search(Image.url))
-            break
+            
         if "urls" in args.option:
             urls += session.query(Url)\
                            .filter(Url.user_uid==uid and \
