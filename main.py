@@ -1,11 +1,14 @@
 import re
 from sqlalchemy import create_engine, desc, asc
 from sqlalchemy.orm import sessionmaker
-from messenger_db import User, Base, Message
+from messenger_db import User, Base, Message, Image, File, Url, Video
+
+from curses import wrapper
+import curses
 
 import format
 from fb_chat import FbBot
-from command_parser import get_parser, update_parser, show_parser
+from command_parser import get_parser, update_parser, show_parser, less_parser
 from datetime import datetime
 
 def main():
@@ -28,63 +31,152 @@ def main():
     def get(args, fbbot=fbbot):
         args = get_parser.parse_args(args)
         if not args.user:
-            return
+            return True
         fbbot.get_concurrent(args.user.replace('-', ' '))
-        return
+        return True
 
     def update(args, fbbot=fbbot):
         args = update_parser.parse_args(args)
         if not args.user:
-            return
+            return True
         fbbot.update_concurrent(args.user)
-        return
+        return True
 
     def show(args, fbbot=fbbot, session=session):
         #TODO: update the session
         args = show_parser.parse_args(args)
-        users = session.query(User).filter(User.name == args.user)
+        users = session.query(User)\
+                       .filter(User.name==args.user.replace('-', ' ')).all()
         if len(users) is 0:
             print("No such user in database.")
             return
-        uid = users[0].uid
+        uid = users[0].user_uid
         texts = []
         images = []
         urls = []
-        regex = args.regex if args.regex else ",*"
+        regex = args.regex if args.regex else ".*"
         regex = re.compile(regex)
         
-        if "texts" in args.option:
+        
+        if "texts" in args.option or "all" in args.option:
             texts += session.query(Message)\
                             .filter(False \
                                     if not Message.text \
                                     else Message.user_uid==uid and \
                                     regex.search(Message.text))\
-                            .order_by(desc(float(Message.timestamp)))
+                            .order_by(asc(Message.timestamp))\
+                            .all()
     
-        if "images" in args.option:
+        if "images" in args.option or "all" in args.option:
             images += session.query(Image)\
                             .filter(Message.user_uid==uid and \
-                                    regex.search(Image.url))
+                                    regex.search(Image.url))\
+                            .order_by(asc(Image.timestamp))\
+                            .all()
             
-        if "urls" in args.option:
+        if "urls" in args.option or "all" in args.option:
             urls += session.query(Url)\
                            .filter(Url.user_uid==uid and \
-                                   regex.search(Url.url))
+                                   regex.search(Url.url))\
+                           .order_by(asc(Url.timestamp))\
+                           .all()
 
         # pretty print
+        print("format: "+str(args.format))
         if args.format=="default":
-            map(format.text_default, texts)
-            map(format.image_default, images)
-            map(format.url_default, images)
+            list(map(format.text_default, texts))
+            list(map(format.image_default, images))
+            list(map(format.url_default, urls))
+        return True
+
+    
+    def less(args, fbbot=fbbot, session=session):
+        args = less_parser.parse_args(args)
+        users = session.query(User)\
+                       .filter(User.name==args.user.replace('-', ' ')).all()
+        if len(users) is 0:
+            print("No such user in database.")
+            return
+        uid = users[0].user_uid
+        contents = []
+
         
-    def quit_(args, fbbot=fbbot, ok=ok):
-        fbbot.loggout()
-        ok = False
+        if "texts" in args.option or "all" in args.option:
+            contents += session.query(Message)\
+                               .filter(Message.user_uid==uid) \
+                               .order_by(asc(Message.timestamp))\
+                               .all()
+            
+        if "images" in args.option or "all" in args.option:
+            contents += session.query(Image)\
+                               .filter(Message.user_uid==uid)\
+                               .order_by(asc(Image.timestamp))\
+                               .all()
+            
+        if "urls" in args.option or "all" in args.option:
+            contents += session.query(Url)\
+                               .filter(Url.user_uid==uid)\
+                               .order_by(asc(Url.timestamp))\
+                               .all()
+
+        def take_timestamp(c):
+            return c.timestamp
+        
+        contents.sort(key=take_timestamp)
+
+        for i in range(0, len(contents)):
+            if isinstance(contents[i], Message):
+                contents[i] = "text <" + contents[i].text + ">"
+            elif isinstance(contents[i], Image):
+                contents[i] = "image <" + contents[i].url + ">"
+            elif isinstance(contents[i], Url):
+                contents[i] = "url <" + contents[i].url + ">"
+        maxlen = 0
+        for c in contents:
+            maxlen = len(c) if len(c) > maxlen else maxlen
+            
+        def display(stdscr):
+            stdscr.clear()
+            pad = curses.newpad(len(contents), maxlen)
+            for i in range(0, len(contents)):
+                pad.addstr(i, 0, contents[i])
+            pad.refresh(0,0,0,0,curses.LINES-1,curses.COLS - 1)
+            pad.keypad(1)
+            x = 0
+            y = 0
+            while 1:
+                ch = pad.getch()
+                if ch in [curses.KEY_DOWN]:
+                    # down
+                    y = y + 1 if y < len(contents) - curses.LINES else y
+                    pad.refresh(y, x, 0, 0, curses.LINES-1, curses.COLS - 1)
+                elif ch in [curses.KEY_UP]:
+                    y = y - 1 if y > 0 else y
+                    pad.refresh(y, x, 0, 0, curses.LINES-1, curses.COLS - 1)
+                else:
+                    break
+            pad.keypad(0)
+
+        wrapper(display)
+        return True
+
+    def help(args):
+        get_parser.print_help()
+        update_parser.print_help()
+        show_parser.print_help()
+        less_parser.print_help()
+        return True
+        
+    def quit_(args, fbbot=fbbot):
+        fbbot.logout()
+        return False
         
     commands_map =  { "get": get, \
                       "update": update, \
                       "show": show, \
-                      "quit": quit_ }
+                      "less": less, \
+                      "quit": quit_ ,\
+                      "help": help}
     
     while ok:
         command = input(">").split()
@@ -93,7 +185,7 @@ def main():
         if not f:
             print("command " + command[0] + " not found")
         else:
-            f(args)
+            ok = f(args)
     return
         
 if __name__ == '__main__':

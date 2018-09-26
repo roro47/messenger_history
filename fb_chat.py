@@ -95,7 +95,9 @@ class FbBot:
                               author_uid=author_uid,\
                               timestamp=timestamp))
             dbsession.commit()
+            print("url added")
             return True
+        print("url found")
         return False
         
     def store_message(self, dbsession, timestamp, user_uid, \
@@ -191,17 +193,18 @@ class FbBot:
                                                 size=a.size,\
                                                 timestamp=\
                                                 msg.timestamp)
-                                                
+'''                                                
                         
                         urls = self.urlextractor.find_urls(msg.text)
 
                         for url in urls:
+                            print("Find url")
                             self.store_url(dbsession=Session,\
                                            url=url,\
                                            user_uid=uid,\
                                            author_uid=msg.author,\
                                            timestamp=int(msg.timestamp))
-'''
+
                         self.store_message(dbsession=Session,\
                                            timestamp=\
                                            int(msg.timestamp),\
