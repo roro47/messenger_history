@@ -1,7 +1,7 @@
 from fbchat import Client
 from fbchat.models import *
 
-from sqlalchemy import exists, asc, desc
+from sqlalchemy import exists, asc, desc, and_
 from sqlalchemy.orm import sessionmaker, scoped_session
 from messenger_db import User, Base, Message, Image, File, Url, Video
 
@@ -12,11 +12,11 @@ from urlextract import URLExtract
 class FbBot:
     def __init__(self, email, password, dbsession, engine, \
                  start_dtime):
-        self.email = email
+        self.email = emailb
         self.password = password
         self.client = Client(email, password)
         self.dbsession = dbsession
-        self.uid = self.client.uid
+        self.uid = int(self.client.uid)
         self.engine = engine
         self.sessionmaker = sessionmaker(bind=engine, autoflush=False)
         self.urlextractor = URLExtract()
@@ -49,66 +49,70 @@ class FbBot:
             return True
         return False
 
-    def store_video(self, dbsession, video_uid, user_uid, timestamp):
-        if not dbsession\
-           .query(exists()\
-                  .where(Video.video_uid==video_uid))\
-           .scalar():
+    def store_video(self, dbsession, video_uid, thread_uid, timestamp,\
+                    author_uid):
+        q = exists().where((Video.timestamp==timestamp) &\
+                                (Video.author_uid==author_uid))
+        if not dbsession.query(q).scalar():
             dbsession.add(Video(video_uid=video_uid,\
-                                user_uid=user_uid,\
+                                thread_uid=thread_uid,\
+                                author_uid=author_uid,\
                                 timestamp=timestamp))
     
-    def store_image(self, dbsession, image_uid, user_uid, url,\
-                    timestamp):
-        if not dbsession\
-           .query(exists()\
-                  .where(Image.image_uid==image_uid))\
-           .scalar():
+    def store_image(self, dbsession, image_uid, thread_uid, url,\
+                    author_uid, timestamp):
+        q = exists().where((Image.timestamp==timestamp) & \
+                           (Image.author_uid==author_uid) & \
+                           (Image.image_uid==image_uid))
+        if not dbsession.query(q).scalar():
             dbsession.add(Image(image_uid=image_uid,\
-                                user_uid=user_uid, \
+                                thread_uid=thread_uid, \
                                 url=url, \
+                                author_uid=author_uid,\
                                 timestamp=timestamp))
             return True
         return False
 
-    def store_file(self, dbsession, file_uid, user_uid, name, url,\
-                   size, timestamp):
+    def store_file(self, dbsession, file_uid, thread_uid, author_uid,\
+                   name, url,size, timestamp):
         
-        q = exists().where(File.file_uid==file_uid)
+        q = exists().where(and_(File.timestamp==timestamp,\
+                                File.author_uid==author_uid))
         
         if not dbsession.query(q).scalar():
             dbsession.add(File(file_uid=file_uid,\
-                               user_uid=user_uid,\
+                               thread_uid=thread_uid,\
+                               author_uid=author_uid, \
                                name=name, \
                                url=url,\
                                size=size,\
-                               timestamp=timstamp))
+                               timestamp=timestamp))
             return True
         return False
 
-    def store_url(self, dbsession, url, user_uid, author_uid,\
+    def store_url(self, dbsession, url, thread_uid, author_uid,\
                   timestamp):
-        q = exists().where(Url.url==url)
+        q = exists().where(and_(Url.timestamp==timestamp,\
+                                Url.author_uid==author_uid))
         if not dbsession.query(q).scalar():
             dbsession.add(Url(url=url, \
-                              user_uid=user_uid, \
+                              thread_uid=thread_uid, \
                               author_uid=author_uid,\
                               timestamp=timestamp))
             dbsession.commit()
-            print("url added")
             return True
-        print("url found")
         return False
         
-    def store_message(self, dbsession, timestamp, user_uid, \
+    def store_message(self, dbsession, timestamp, thread_uid, \
                        message_id, text, author_uid):
         print("< " + text + " >")
         q = exists()\
             .where(Message.timestamp==timestamp)\
-            .where(Message.user_uid==user_uid)
+            .where(Message.author_uid==author_uid)
         if not dbsession.query(q).scalar():
             dbsession.add(Message(timestamp=timestamp, \
-                                  user_uid=user_uid, \
+                                  thread_uid=thread_uid, \
+                                  author_uid=author_uid,\
                                   message_uid=message_id, \
                                   text=text))
             dbsession.commit()
@@ -162,57 +166,61 @@ class FbBot:
             def task(timestamp_pair, uid):
                 Session()
                 (t1, last_tstamp) = timestamp_pair
+                prev = last_tstamp
                 while float(last_tstamp) > t1:
                     fetched = self\
                               .fetch_history(uid=uid,\
                                              limit=50,\
                                              before=last_tstamp)
                     if len(fetched) is 0:
-                        Session.remove()
-                        return False
+                        break
                     last_tstamp = fetched[len(fetched)-1].timestamp
+                    if float(last_tstamp) == float(prev):
+                        break
+                    prev = last_tstamp
                     for msg in fetched:
                         if msg.text is None:
                             continue
-                        '''
                         for a in msg.attachments:
                             if isinstance(a, ImageAttachment):
                                 url=self.client \
                                         .fetchImageUrl(a.uid)
                                 self.store_image(dbsession=Session,\
                                                  image_uid=a.uid,\
-                                                 user_uid=uid,\
+                                                 thread_uid=uid,\
+                                                 author_uid=\
+                                                 msg.author, \
                                                  url=url,\
-                                                 timestamp=msg.timestamp)
+                                                 timestamp= \
+                                                 msg.timestamp)
                             elif isinstance(a, FileAttachment):
                                 self.store_file(dbsession=Session,\
                                                 file_uid=a.uid,\
-                                                user_uid=uid,\
+                                                thread_uid=uid,\
+                                                author_uid=\
+                                                msg.author,\
                                                 name=a.name,\
                                                 url=a.url,\
                                                 size=a.size,\
                                                 timestamp=\
                                                 msg.timestamp)
-'''                                                
                         
                         urls = self.urlextractor.find_urls(msg.text)
 
                         for url in urls:
-                            print("Find url")
                             self.store_url(dbsession=Session,\
                                            url=url,\
-                                           user_uid=uid,\
+                                           thread_uid=uid,\
                                            author_uid=msg.author,\
                                            timestamp=int(msg.timestamp))
 
                         self.store_message(dbsession=Session,\
                                            timestamp=\
                                            int(msg.timestamp),\
-                                           user_uid=uid,\
+                                           thread_uid=uid,\
                                            message_id=msg.uid,\
                                            text=msg.text,\
                                            author_uid=msg.author)
-                        
                 Session.remove()  
                 return True
             
@@ -223,15 +231,16 @@ class FbBot:
                     futures.append(future)
                     for future in futures:
                         future.result()
-                    if len(self.fetch_history(uid=uid, \
-                                              limit=40, \
-                                              before=last_tstamp)) \
-                                              is 0:
-                        return
             if update and last_dtime.timstamp()*m >= last_stored:
                 break
             # break if time before user start using facebook
-            if last_dtime < self.start_time:
+            if last_dtime < self.start_dtime:
+                print("last :" + str(last_dtime.year)+"-"+\
+                      str(last_dtime.month) + "-" +\
+                      str(last_dtime.day))
+                print("start time: " + str(self.start_dtime.year)\
+                      + "-" + str(self.start_dtime.month) + "-" \
+                      + str(self.start_dtime.day))
                 break
             
         return

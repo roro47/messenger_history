@@ -11,6 +11,8 @@ from fb_chat import FbBot
 from command_parser import get_parser, update_parser, show_parser, less_parser
 from datetime import datetime
 
+import subprocess
+
 def main():
     
     engine = create_engine("sqlite:///message.db")
@@ -62,21 +64,21 @@ def main():
             texts += session.query(Message)\
                             .filter(False \
                                     if not Message.text \
-                                    else Message.user_uid==uid and \
+                                    else Message.thread_uid==uid and \
                                     regex.search(Message.text))\
                             .order_by(asc(Message.timestamp))\
                             .all()
     
         if "images" in args.option or "all" in args.option:
             images += session.query(Image)\
-                            .filter(Message.user_uid==uid and \
+                            .filter(Message.thread_uid==uid and \
                                     regex.search(Image.url))\
                             .order_by(asc(Image.timestamp))\
                             .all()
             
         if "urls" in args.option or "all" in args.option:
             urls += session.query(Url)\
-                           .filter(Url.user_uid==uid and \
+                           .filter(Url.thread_uid==uid and \
                                    regex.search(Url.url))\
                            .order_by(asc(Url.timestamp))\
                            .all()
@@ -92,72 +94,65 @@ def main():
     
     def less(args, fbbot=fbbot, session=session):
         args = less_parser.parse_args(args)
+        args.user = args.user.replace('-', ' ')
         users = session.query(User)\
-                       .filter(User.name==args.user.replace('-', ' ')).all()
+                       .filter(User.name==args.user).all()
         if len(users) is 0:
             print("No such user in database.")
             return
         uid = users[0].user_uid
         contents = []
-
         
         if "texts" in args.option or "all" in args.option:
             contents += session.query(Message)\
-                               .filter(Message.user_uid==uid) \
+                               .filter(Message.thread_uid==uid) \
                                .order_by(asc(Message.timestamp))\
                                .all()
-            
+
+        
         if "images" in args.option or "all" in args.option:
             contents += session.query(Image)\
-                               .filter(Message.user_uid==uid)\
+                               .filter(Image.thread_uid==uid)\
                                .order_by(asc(Image.timestamp))\
                                .all()
-            
+
+        
         if "urls" in args.option or "all" in args.option:
             contents += session.query(Url)\
-                               .filter(Url.user_uid==uid)\
+                               .filter(Url.thread_uid==uid)\
                                .order_by(asc(Url.timestamp))\
                                .all()
-
+        
         def take_timestamp(c):
             return c.timestamp
         
         contents.sort(key=take_timestamp)
-
+        out = ""
+        
         for i in range(0, len(contents)):
+            header = "You: " if contents[i].author_uid == fbbot.uid \
+                     else args.user + " "
+            dtime = datetime.fromtimestamp(contents[i].timestamp/1000.0)
+            header += str(dtime.year) + '-' + str(dtime.month) \
+                      + '-' + str(dtime.day) + ' ' + \
+                      str(dtime.hour) + ':' + str(dtime.minute) \
+                      + ':' + str(dtime.second)
+            m = ''
             if isinstance(contents[i], Message):
-                contents[i] = "text <" + contents[i].text + ">"
+                m += "text <" + contents[i].text + ">"
             elif isinstance(contents[i], Image):
-                contents[i] = "image <" + contents[i].url + ">"
+                m += "image <" + contents[i].url + ">"
             elif isinstance(contents[i], Url):
-                contents[i] = "url <" + contents[i].url + ">"
-        maxlen = 0
-        for c in contents:
-            maxlen = len(c) if len(c) > maxlen else maxlen
+                m += "url <" + contents[i].url + ">"
+            out += header + '\n'
+            out += m + '\n'
+        
             
-        def display(stdscr):
-            stdscr.clear()
-            pad = curses.newpad(len(contents), maxlen)
-            for i in range(0, len(contents)):
-                pad.addstr(i, 0, contents[i])
-            pad.refresh(0,0,0,0,curses.LINES-1,curses.COLS - 1)
-            pad.keypad(1)
-            x = 0
-            y = 0
-            while 1:
-                ch = pad.getch()
-                if ch in [curses.KEY_DOWN]:
-                    # down
-                    y = y + 1 if y < len(contents) - curses.LINES else y
-                    pad.refresh(y, x, 0, 0, curses.LINES-1, curses.COLS - 1)
-                elif ch in [curses.KEY_UP]:
-                    y = y - 1 if y > 0 else y
-                    pad.refresh(y, x, 0, 0, curses.LINES-1, curses.COLS - 1)
-                else:
-                    break
-            pad.keypad(0)
+        maxlen = 0
+        out = out.encode('utf-8')
+        pager = subprocess.Popen(['less'], stdin=subprocess.PIPE)
+        p = pager.communicate(out)
 
-        wrapper(display)
         return True
 
     def help(args):
