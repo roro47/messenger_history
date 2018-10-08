@@ -2,11 +2,11 @@
 import re
 from sqlalchemy import create_engine, desc, asc
 from sqlalchemy.orm import sessionmaker
-from messenger_db import User, Base, Message, Image, File, Url, Video
+from .messenger_db import User, Base, Message, Image, File, Url, Video
 
-import format
-from fb_chat import FbBot
-from command_parser import get_parser, update_parser, show_parser, less_parser
+from . import format
+from .fb_chat import FbBot
+from .command_parser import get_parser, update_parser, show_parser, less_parser
 from datetime import datetime
 
 import subprocess

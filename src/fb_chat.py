@@ -3,7 +3,7 @@ from fbchat.models import *
 
 from sqlalchemy import exists, asc, desc, and_
 from sqlalchemy.orm import sessionmaker, scoped_session
-from messenger_db import User, Base, Message, Image, File, Url, Video
+from .messenger_db import User, Base, Message, Image, File, Url, Video
 
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
