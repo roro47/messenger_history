@@ -12,19 +12,29 @@ from datetime import datetime
 import subprocess
 from getpass import getpass
 
+from fbchat import Client, FBchatException
+
 import os
 
 def main():
     if not os.environ['MSGH_DB_PATH']:
-        print("Not intalled")
+        print("database path MSGH_DB_PATH not found")
+        return
+        
     db_path = os.environ['MSGH_DB_PATH']
     engine = create_engine('sqlite://' + db_path)
     Base.metadata.bind = engine
     DBSession = sessionmaker(bind=engine)
     session = DBSession()
-    
-    email = input("email> ")
-    password = getpass("password> ")
+
+    client = None
+    while client is None:
+        email = input("email> ")
+        password = getpass("password> ")
+        try:
+            client = Client(email, password)
+        except FBchat_
+        
     start_time = datetime(year=2018, month=1, day=1)
     fbbot = FbBot(email, password, session, engine, start_time)
 
