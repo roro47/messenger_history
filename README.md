@@ -15,14 +15,22 @@ This is a command-line tool that is used for fast retrieve of messenger massage
 
 **Installation**
   messenger_history is currently only available on Unix platform.
-1. Pip (TODO)
+1. pip
+```
+pip install messenger_history
+```
 2. Download
 git clone the repistory and run setup.py
 ```
 python setup.py install
 ```
-You need to specify the directory you want to store the database to 
-After installation, 
+For both pip and Download,
+You need to specify the directory you want to store the database.
+For example, you want to store the database at /homes/foo/database.db
+then
+```
+export MSGH_DB_PATH=/homes/foo/database.db
+```
 
 Usage
 ```
