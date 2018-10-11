@@ -23,4 +23,3 @@ less_parser.add_argument("user")
 less_parser.add_argument("-o", "--option", default=["all"], help="display options: all, texts, urls, images")
 less_parser.add_argument("-r", "--regex", default=".*", help="regex used to search")
 less_parser.add_argument("-s", "--stream", help="specify the file path as the output stream")
-

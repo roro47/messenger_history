@@ -1,13 +1,13 @@
 from fbchat import Client
 from fbchat.models import *
-
-from sqlalchemy import exists, asc, desc, and_
-from sqlalchemy.orm import sessionmaker, scoped_session
-from .messenger_db import User, Base, Message, Image, File, Url, Video
-
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
 from urlextract import URLExtract
+from sqlalchemy import exists, asc, desc, and_
+from sqlalchemy.orm import sessionmaker, scoped_session
+
+from src.messenger_db import *
+from src.util import to_fb, from_fb
 
 class FbBot:
     def __init__(self, client, dbsession, engine, \
@@ -123,7 +123,7 @@ class FbBot:
     def get_concurrent(self, target_name, update=False):
         (name, uid) = self.find_thread(target_name)
         if not uid:
-            print("No such friend")
+            eprint("No such friend")
             return
         self.store_user(name=name, uid=uid)
         
@@ -132,11 +132,9 @@ class FbBot:
         if last_tstamp is None:
             return
         
-        m = 1000.0
-        last_dtime = datetime.fromtimestamp(last_tstamp/m)
+        last_dtime = datetime.fromtimestamp(from_fb(last_tstamp))
         dtime = timedelta(days=62) # size of increment
         max_dates = 20
-        count = 1
 
         if update:
             last_stored = float(self.dbsession\
@@ -144,45 +142,45 @@ class FbBot:
                                 .order_by(desc(Message.timestamp))[0])
         
         while True:
-            count = count + 1
-            print('-' * 80)
+            # establish one time range to collect text
             times = [(last_dtime-dtime, last_dtime)]
-            timestamps = [((last_dtime-dtime).timestamp()*m,\
-                            last_dtime.timestamp()*m)]
+            timestamps = [((to_fb((last_dtime-dtime).timestamp()),\
+                            to_fb(last_dtime.timestamp())))]
+    
             for i in range(1, max_dates):
                 (start_t1, end_t1) = times[i-1]
                 start_t2 = start_t1 - dtime
                 times.append((start_t2, start_t1))
-                timestamps.append((start_t2.timestamp()*m,\
-                                   start_t1.timestamp()*m))
-                
+                timestamps.append((to_fb(start_t2.timestamp()),\
+                                   to_fb(start_t1.timestamp())))
             (last_tstamp,dummy) = timestamps[len(timestamps)-1]
-            last_dtime = datetime.fromtimestamp(last_tstamp/m)
+            last_dtime = datetime.fromtimestamp(from_fb(last_tstamp))
             
             Session = scoped_session(self.sessionmaker)
-            
+
+            # in each task, the worker fetch messages in
+            # a given timestamp range
+            # for example, (2018-01-03, 2018-04-28)
             def task(timestamp_pair, uid):
                 Session()
-                (t1, last_tstamp) = timestamp_pair
-                prev = last_tstamp
-                while float(last_tstamp) > t1:
+                (from_tstamp, to_tstamp) = timestamp_pair
+                prev = to_tstamp
+                while float(to_tstamp) > from_tstamp:
                     fetched = self\
                               .fetch_history(uid=uid,\
                                              limit=50,\
-                                             before=last_tstamp)
+                                             before=to_tstamp)
                     if len(fetched) is 0:
                         break
-                    last_tstamp = fetched[len(fetched)-1].timestamp
-                    if float(last_tstamp) == float(prev):
-                        break
-                    prev = last_tstamp
+                    to_tstamp = fetched[len(fetched)-1].timestamp
+                    if float(to_tstamp) == float(prev):
+                        break 
+                    prev = to_tstamp
                     for msg in fetched:
-                        if msg.text is None:
-                            continue
+                        # get all the attachment
                         for a in msg.attachments:
                             if isinstance(a, ImageAttachment):
-                                url=self.client \
-                                        .fetchImageUrl(a.uid)
+                                url = self.client.fetchImageUrl(a.uid)
                                 self.store_image(dbsession=Session,\
                                                  image_uid=a.uid,\
                                                  thread_uid=uid,\
@@ -202,23 +200,27 @@ class FbBot:
                                                 size=a.size,\
                                                 timestamp=\
                                                 msg.timestamp)
-                        
-                        urls = self.urlextractor.find_urls(msg.text)
+                                
+                        # get texts and the url embedded
+                        if msg.text is not None:
+                            # extract url from text
+                            urls = self.urlextractor\
+                                       .find_urls(msg.text)
+                            for url in urls:
+                                self.store_url(dbsession=Session,\
+                                               url=url,\
+                                               thread_uid=uid,\
+                                               author_uid=msg.author,\
+                                               timestamp=\
+                                               int(msg.timestamp))
 
-                        for url in urls:
-                            self.store_url(dbsession=Session,\
-                                           url=url,\
-                                           thread_uid=uid,\
-                                           author_uid=msg.author,\
-                                           timestamp=int(msg.timestamp))
-
-                        self.store_message(dbsession=Session,\
-                                           timestamp=\
-                                           int(msg.timestamp),\
-                                           thread_uid=uid,\
-                                           message_id=msg.uid,\
-                                           text=msg.text,\
-                                           author_uid=msg.author)
+                            self.store_message(dbsession=Session,\
+                                               timestamp=\
+                                               int(msg.timestamp),\
+                                               thread_uid=uid,\
+                                               message_id=msg.uid,\
+                                               text=msg.text,\
+                                               author_uid=msg.author)
                 Session.remove()  
                 return True
             
@@ -229,16 +231,11 @@ class FbBot:
                     futures.append(future)
                     for future in futures:
                         future.result()
-            if update and last_dtime.timstamp()*m >= last_stored:
+                        
+            if update and to_fb(last_dtime.timstamp()) >= last_stored:
                 break
             # break if time before user start using facebook
             if last_dtime < self.start_dtime:
-                print("last :" + str(last_dtime.year)+"-"+\
-                      str(last_dtime.month) + "-" +\
-                      str(last_dtime.day))
-                print("start time: " + str(self.start_dtime.year)\
-                      + "-" + str(self.start_dtime.month) + "-" \
-                      + str(self.start_dtime.day))
                 break
             
         return

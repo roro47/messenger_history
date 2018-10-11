@@ -1,12 +1,9 @@
 import os
 import sys
-from sqlalchemy import Column, ForeignKey, Integer, String
+from sqlalchemy import Column, ForeignKey, Integer, String, create_engine
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import relationship
-from sqlalchemy import create_engine
 
 Base = declarative_base()
-
 
 class User(Base):
     __tablename__ = "users"
@@ -36,6 +33,7 @@ class File(Base):
     
 class Url(Base):
     __tablename__ = "urls"
+    
     url = Column(String)
     user_uid = Column(Integer)
     author_uid = Column(Integer, primary_key=True)
@@ -54,12 +52,9 @@ class Image(Base):
 
 class Video(Base):
     __tablename__ = "videos"
+    
     video_uid = Column(Integer)
     author_uid = Column(Integer, primary_key=True)
     user_uid = Column(Integer)
     timestamp = Column(Integer, primary_key=True)
     thread_uid = Column(Integer)
-
-engine = create_engine("sqlite:///message.db")
-
-Base.metadata.create_all(engine)
