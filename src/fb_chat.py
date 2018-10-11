@@ -10,11 +10,9 @@ from datetime import datetime, timedelta
 from urlextract import URLExtract
 
 class FbBot:
-    def __init__(self, email, password, dbsession, engine, \
+    def __init__(self, client, dbsession, engine, \
                  start_dtime):
-        self.email = email
-        self.password = password
-        self.client = Client(email, password)
+        self.client = client
         self.dbsession = dbsession
         self.uid = int(self.client.uid)
         self.engine = engine
