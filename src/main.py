@@ -22,7 +22,6 @@ variable exported from environment
 2. FB_JOIN_TIME
      the time you join facebook, in the form of year:month:day
 '''
-
 def check_env():
     env_vars = ['MSGH_DB_PATH', 'FB_JOIN_TIME']
     for env in env_vars:
@@ -65,15 +64,15 @@ def main():
     client = get_client()
     fbbot = FbBot(client, session, engine, start_time)
 
-    commands_map =  { "get": partial(get, fbbot=fbbot), \
-                      "update": partial(update, fbbot), \
-                      "show": partial(show, fbbot=fbbot,\
-                                      session=session), \
-                      "less": partial(show, fbbot=fbbot,\
-                                      session=session,\
-                                      stream="less"), \
-                      "quit": partial(quit_, fbbot=fbbot),\
-                      "help": help, \
+    commands_map =  { "get": partial(get, fbbot=fbbot),
+                      "update": partial(update, fbbot),
+                      "show": partial(show, fbbot=fbbot,
+                                      session=session),
+                      "less": partial(show, fbbot=fbbot,
+                                      session=session,
+                                      stream="less"),
+                      "quit": partial(quit_, fbbot=fbbot),
+                      "help": help,
                       "reset": partial(reset, db_path=db_path)}
     
     ok = True
