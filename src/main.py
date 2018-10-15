@@ -65,7 +65,7 @@ def main():
     fbbot = FbBot(client, session, engine, start_time)
 
     commands_map =  { "get": partial(get, fbbot=fbbot),
-                      "update": partial(update, fbbot),
+                      "update": partial(update, fbbot=fbbot),
                       "show": partial(show, fbbot=fbbot,
                                       session=session),
                       "less": partial(show, fbbot=fbbot,
